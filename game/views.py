@@ -1271,6 +1271,6 @@ def analyze_game_view(request):
             
         summary = build_summary(moves, result, reason)
         return JsonResponse(summary)
-  except Exception as e:
+    except Exception as e:
         logger.error('Failed to analyze game: %s', e)
         return JsonResponse({'error': 'Failed to analyze game'}, status=400)
