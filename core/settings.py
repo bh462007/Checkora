@@ -194,3 +194,8 @@ SECURE_HSTS_PRELOAD = IS_PRODUCTION
 
 # Secret token for authenticating Vercel cron job requests to /api/cron/cleanup-stale-games/
 CRON_SECRET = os.environ.get('CRON_SECRET')
+
+# Trusted proxies for client IP extraction from X-Forwarded-For header
+TRUSTED_PROXIES = os.environ.get('TRUSTED_PROXIES', '127.0.0.1,::1').split(',')
+TRUSTED_PROXIES = [ip.strip() for ip in TRUSTED_PROXIES if ip.strip()]
+
