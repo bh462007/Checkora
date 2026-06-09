@@ -1254,16 +1254,23 @@ class CustomPasswordResetView(PasswordResetView):
 
 
 def get_client_ip(request):
-    """Get the client IP address from the request headers or metadata safely."""
+    """Get client IP address safely by parsing trusted proxies."""
     remote_addr = request.META.get('REMOTE_ADDR', 'unknown')
-    trusted_proxies = getattr(
-        settings, 'TRUSTED_PROXIES', ['127.0.0.1', '::1']
+    trusted_proxies = set(
+        getattr(settings, 'TRUSTED_PROXIES', ['127.0.0.1', '::1'])
     )
-    if remote_addr in trusted_proxies:
-        forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if forwarded_for:
-            return forwarded_for.split(',')[0].strip()
+    if remote_addr not in trusted_proxies:
+        return remote_addr
+
+    forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    hops = [
+        h.strip() for h in forwarded_for.split(',') if h.strip()
+    ]
+    for hop in reversed(hops):
+        if hop not in trusted_proxies:
+            return hop
     return remote_addr
+
 
 
 def normalize_username(username):
@@ -1299,33 +1306,44 @@ def get_ip_lockout_key(ip):
 
 def increment_counter(key, timeout):
     """Increment cache value atomically or fall back safely."""
-    try:
-        if cache.add(key, 1, timeout=timeout):
-            return 1
-        else:
-            return cache.incr(key)
-    except (ValueError, TypeError):
-        lock_key = f"lock:{key}"
-        acquired = False
-        # Spin lock: attempt to acquire for up to 5 seconds
-        for _ in range(100):
-            if cache.add(lock_key, 1, timeout=10):
-                acquired = True
-                break
-            time.sleep(0.05)
-
+    # DatabaseCache does not provide atomic incr, so force fallback lock.
+    is_db_cache = cache.__class__.__name__ == 'DatabaseCache'
+    if not is_db_cache:
         try:
-            val = cache.get(key)
-            try:
-                val = int(val) if val is not None else 0
-            except (ValueError, TypeError):
-                val = 0
-            val += 1
-            cache.set(key, val, timeout=timeout)
-            return val
-        finally:
-            if acquired:
-                cache.delete(lock_key)
+            if cache.add(key, 1, timeout=timeout):
+                return 1
+            else:
+                return cache.incr(key)
+        except (ValueError, TypeError):
+            pass
+
+    lock_key = f"lock:{key}"
+    acquired = False
+    # Spin lock: attempt to acquire for up to 5 seconds
+    for _ in range(100):
+        if cache.add(lock_key, 1, timeout=10):
+            acquired = True
+            break
+        time.sleep(0.05)
+
+    if not acquired:
+        raise RuntimeError(
+            "Failed to acquire cache lock for increment_counter."
+        )
+
+    try:
+        val = cache.get(key)
+        try:
+            val = int(val) if val is not None else 0
+        except (ValueError, TypeError):
+            val = 0
+        val += 1
+        cache.set(key, val, timeout=timeout)
+        return val
+    finally:
+        if acquired:
+            cache.delete(lock_key)
+
 
 
 def login_view(request):
