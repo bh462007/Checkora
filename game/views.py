@@ -1596,23 +1596,16 @@ def stats_view(request):
 
     total_games = user_results.count()
 
-    total_wins = sum(
-        1 for game in user_results
-        if (
-            (game.player_color == "white" and game.winner == "white")
-            or
-            (game.player_color == "black" and game.winner == "black")
-        )
-    )
+    total_wins = user_results.filter(
+        winner=F("player_color")
+    ).exclude(
+        winner="draw"
+    ).count()
 
-    total_losses = sum(
-        1 for game in user_results
-        if (
-            (game.player_color == "white" and game.winner == "black")
-            or
-            (game.player_color == "black" and game.winner == "white")
-        )
-    )
+    total_losses = user_results.filter(
+        Q(player_color="white", winner="black") |
+        Q(player_color="black", winner="white")
+    ).count()
 
     total_draws = user_results.filter(winner="draw").count()
 
@@ -1721,13 +1714,11 @@ def stats_view(request):
         completed=True
     ).count()
 
-    total_lessons = 20
-
-    lesson_completion_percentage = round(
-        (lessons_completed / total_lessons) * 100,
-        2
-    ) if total_lessons else 0
-
+    total_lessons = sum(
+        len(level["lessons"])
+        for level in LESSON_LEVELS
+    )
+    
     # Puzzle Analytics
     puzzle_stats, _ = PuzzleStats.objects.get_or_create(
         user=request.user
