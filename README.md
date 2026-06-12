@@ -150,7 +150,7 @@ This guide expands on the Quick Start instructions and provides a complete devel
 
 For detailed testing instructions, see:
 
-- [Testing  & QA Guide](docs/testing.md)
+- [Testing & QA Guide](docs/testing.md)
 
 This guide covers:
 
